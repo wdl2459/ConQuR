@@ -1,0 +1,19 @@
+Package: ConQuR
+Type: Package
+Title: Batch Effects Removal for Microbiome Data in Large-Scale Epidemiology Studies via Conditional Quantile Regression
+Version: 1.0
+Author: Wodan Ling and Michael C. Wu
+Maintainer: Wodan Ling <wling@fredhutch.org>
+Description: This package conducts batch effects removal from a taxa read count table by a conditional quantile regression method. The distributional attributes of microbiome data - zero-inflation and over-dispersion, are simultaneously considered. 
+License: GPL (>=2)
+Encoding: UTF-8
+LazyData: true
+NeedsCompilation: no
+Imports: quantreg, cqrReg, glmnet, dplyr, doParallel, gplots, vegan, ade4, compositions, randomForest, ROCR, ape, GUniFrac
+RoxygenNote: 7.1.1
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Depends: 
+    R (>= 3.5.0)
