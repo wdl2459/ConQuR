@@ -1,6 +1,6 @@
 # ConQuR
 
-Batch effects removal for microbiome data in large-scale epidemiology studies via conditional quantile regression
+Batch effects removal for microbiome data via conditional quantile regression
 
 Install the package in R by: devtools::install_github("wdl2459/ConQuR"). And find the vignettes at: https://wdl2459.github.io/ConQuR/ConQuR.Vignette.html
 
