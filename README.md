@@ -17,12 +17,14 @@ The package depends on the following R packages: quantreg, cqrReg, glmnet, dplyr
 
 ## Installation guide
 
-Users should install `doParallel` package prior to installing `ConQuR` (other package dependencies will be taken care during installing `ConQuR`):
+Users should install `doParallel` package prior to installing `ConQuR` (other package dependencies will be taken care during installing `ConQuR`), from an `R` terminal:
 ```
 install.packages("doParallel")
 ```
+The process should should 3 seconds. 
 
-From an `R` session, install `ConQuR` by:
+
+Then, from an `R` session, install `ConQuR` by:
 ```
 devtools::install_github("wdl2459/ConQuR")
 ```
@@ -51,8 +53,8 @@ browseVignettes("ConQuR")
 
 Due to technical issues, always library `doParallel` together with `ConQuR`:
 ```
-library(doParallel) 
 library(ConQuR)
+library(doParallel) 
 ```
 
 For detailed use, refer to the materials in Demo. 
