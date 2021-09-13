@@ -3,7 +3,7 @@
 
 ## Overview
 
-This package conducts batch effects removal from a taxa read count table by a conditional quantile regression method. The distributional attributes of microbiome data - zero-inflation and over-dispersion, are simultaneously considered. A batch-removed taxa read count table will be generated. 
+This package conducts batch effects removal from a taxa read count table by a conditional quantile regression method. The distributional attributes of microbiome data, zero-inflation and over-dispersion, are simultaneously considered. A batch-removed taxa read count table will be generated. 
 
 
 ## System requirements
