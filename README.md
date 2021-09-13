@@ -51,7 +51,7 @@ browseVignettes("ConQuR")
 
 ## Instructions for use
 
-Due to technical issues, always library `doParallel` together with `ConQuR`:
+Due to technical issues, always library `doParallel` together with `ConQuR`, from an `R` session:
 ```
 library(ConQuR)
 library(doParallel) 
