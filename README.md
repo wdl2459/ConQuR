@@ -8,7 +8,7 @@ This package conducts batch effects removal from a taxa read count table by a co
 
 ## System requirements
 
-The `ConQuR` package (Version 1.0) should be compatible with Windows, Mac, and Linux operating systems.
+The `ConQuR` package (version 1.0) should be compatible with Windows, Mac, and Linux operating systems.
 
 Before setting up the package, users should have `R` version 3.5.0 or higher. 
 
@@ -21,7 +21,7 @@ Users should install `doParallel` package prior to installing `ConQuR` (other pa
 ```
 install.packages("doParallel")
 ```
-The process should should 3 seconds. 
+The process should take 3 seconds. 
 
 
 Then, from an `R` session, install `ConQuR` by:
