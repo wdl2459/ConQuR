@@ -5,7 +5,7 @@ Version: 2.0
 Author: Wodan Ling and Michael C. Wu
 Maintainer: Wodan Ling <wling@fredhutch.org>
 Description: This package conducts batch effects removal from a taxa read count table by a conditional quantile regression method. The distributional attributes of microbiome data - zero-inflation and over-dispersion, are simultaneously considered. 
-License: GPL (>=2)
+License: GPL-3.0
 Encoding: UTF-8
 LazyData: true
 NeedsCompilation: no
