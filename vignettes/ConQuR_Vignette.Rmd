@@ -30,9 +30,11 @@ knitr::opts_chunk$set(
 
 # Overview
 
-The ConQuR package (v1.0) contains functions that conduct batch effects removal from **a taxa read count table** by a conditional quantile regression method. The distributional attributes of microbiome data - zero-inflation and over-dispersion, are simultaneously considered. To achieve the maximum removal of batch effects, a function tuning among the variations of ConQuR is provided. Supporting functions to compute PERMANOVA R$^2$, print PCoA plot and predict key variables based on a taxa read count table are also provided. 
+The ConQuR package (v2.0) contains functions that conduct batch effects removal from **a taxa read count table** by a conditional quantile regression method. The distributional attributes of microbiome data - zero-inflation and over-dispersion, are simultaneously considered. To achieve the maximum removal of batch effects, a function tuning among the variations of ConQuR is provided. Supporting functions to compute PERMANOVA R$^2$, print PCoA plot and predict key variables based on a taxa read count table are also provided. 
 
-The following packages are required for functions and examples in the ZINQ package: quantreg, cqrReg, glmnet, dplyr, doParallel, gplots, vegan, ade4, compositions, randomForest, ROCR, ape, GUniFrac.
+The following packages are required for functions and examples in the ZINQ package: quantreg, cqrReg, glmnet, dplyr, doParallel, gplots, vegan, ade4, compositions, randomForest, ROCR, ape, GUniFrac, fastDummies.
+
+**Note**: Due to technical issues, always library doParallel together with ConQuR.
 
 
 ```{r setup}
@@ -45,13 +47,18 @@ library(doParallel)
 
 ## Sample data
 
-We will use the sample data in the package to demonstrate how to use ConQuR. The data 100 taxa from 273 samples, which were sequenced in 3 batches. There are batchid (factor), and the metadata: sbp (systolic blood pressure, the key variable, continuous), sex (covariate 1, binary), race (covariate 2, binary) and age (covariate 3, continuous). 
+We will use the sample data in the package to demonstrate how to use ConQuR. The dataset contains 100 taxa from 273 samples, which were sequenced in 3 batches. There are batchid (factor), and the metadata: sbp (systolic blood pressure, the key variable, continuous), sex (covariate 1, binary), race (covariate 2, binary) and age (covariate 3, continuous). 
+
+**Note**:
+
+1. taxa *only* contains taxonomic read counts, which is a n (sample) by p (taxa) matrix. 
+2. At this step, always do *factor()* for discrete variables, and do *droplevels()* to drop unused factor levels.
 
 ```{r}
 data(Sample_Data)
 
 taxa = Sample_Data[, 1:100]
-str(taxa)
+taxa[146:150, 1:5]
 
 batchid = Sample_Data[, 'batchid']
 summary(batchid)
@@ -63,66 +70,106 @@ summary(covar)
 
 ## Use of ConQuR
 
-We first use ConQuR (default setting) to remove batch effects from the taxa read count table. 
+We first use ConQuR (default fitting strategy) to remove batch effects from the taxa read count table, with the randomly picked reference batch: Batch 0. For the default, standard logistic regression and standard quantile regression are used, interpolation of the piece-wise estimation is not used when estimating the conditional quantile functions (both original and batch-free) of the taxonmic read count for each sample and each taxon.  
+
+**Note**: option(warn = -1) is used in the vignette to suppress a benign warning from quantile regression indicating the solution is not unique. Since quantile regression is conducted many times throughout the vignette, it becomes unwieldy and difficult to read if the warnings are not suppressed. 
 
 ```{r}
 options(warn=-1)
-taxa_corrected = ConQuR(tax_tab=taxa, batchid=batchid, covariates=covar, batch_ref="0")
-str(taxa_corrected)
+taxa_corrected1 = ConQuR(tax_tab=taxa, batchid=batchid, covariates=covar, batch_ref="0")
+taxa_corrected1[146:150, 1:5]
 ```
+
+
+We then apply ConQuR with the penalized fitting strategy: logistic LASSO regression (with the optimal $\lambda^L$ chosen via cross-validation) and quantile LASSO regression (with the default $\lambda^Q = \frac{2p}{n}$, can be changed to $\lambda^Q = \frac{2p}{log(n)}$ by setting *lambda_quantile="2p/logn"*) are used, interpolation of the piece-wise estimation is used. The penalized fitting strategy tackles the high-dimensional covariate problem, helps to stablize the estimates, and prevents over-correction (the case that the key variable's effects are also largely eliminated).  
+
+```{r}
+options(warn=-1)
+taxa_corrected2 = ConQuR(tax_tab=taxa, batchid=batchid, covariates=covar, batch_ref="0",
+                         logistic_lasso=T, quantile_type="lasso", interplt=T)
+taxa_corrected2[146:150, 1:5]
+```
+
 
 
 ## Check how ConQuR works
 
-Next, we compare the corrected taxa read count table to the original one, checking whether the batch effects are mitigated. 
+Next, we compare the corrected taxa read count table to the original one, checking whether the batch effects are eliminated and the key variable's effects are preserved. 
 
 ### Whether the PCoA plot is more unified w.r.t. batchid
 
 ```{r}
-par(mfrow=c(1, 2))
+par(mfrow=c(2, 3))
+
 Plot_PCoA(TAX=taxa, factor=batchid, main="Before Correction, Bray-Curtis")
-Plot_PCoA(TAX=taxa, factor=batchid, dissimilarity="Aitch",  main="Before Correction, Aitchison")
+Plot_PCoA(TAX=taxa_corrected1, factor=batchid, main="ConQuR (Default), Bray-Curtis")
+Plot_PCoA(TAX=taxa_corrected2, factor=batchid, main="ConQuR (Penalized), Bray-Curtis")
+
+Plot_PCoA(TAX=taxa, factor=batchid, dissimilarity="Aitch", main="Before Correction, Aitchison")
+Plot_PCoA(TAX=taxa_corrected1, factor=batchid, dissimilarity="Aitch", main="ConQuR (Default), Aitchison")
+Plot_PCoA(TAX=taxa_corrected2, factor=batchid, dissimilarity="Aitch", main="ConQuR (Penalized), Aitchison")
+
 ```
 
-```{r}
-par(mfrow=c(1, 2))
-Plot_PCoA(TAX=taxa_corrected, factor=batchid, main="After Correction, Bray-Curtis")
-Plot_PCoA(TAX=taxa_corrected, factor=batchid, dissimilarity="Aitch",  main="After Correction, Aitchison")
-```
 
 
-### Whether the variability explained by batchid (quantified by PERMANOVA R$^2$) is decreased
+### Whether the variability explained by batchid (quantified by PERMANOVA R$^2$) is decreased and that explained by the key variable is preserved. 
 
-In the original taxa read count table:
+In the original taxa read count table, with the key variable *sbp* be the 4th variable in *covar*:
 ```{r}
 PERMANOVA_R2(TAX=taxa, batchid=batchid, covariates=covar, key_index=4)
 ```
 
-In the corrected taxa read count table:
+In the corrected taxa read count table, by ConQuR (default):
 ```{r}
-PERMANOVA_R2(TAX=taxa_corrected, batchid=batchid, covariates=covar, key_index=4)
+PERMANOVA_R2(TAX=taxa_corrected1, batchid=batchid, covariates=covar, key_index=4)
 ```
+
+In the corrected taxa read count table, by ConQuR (penalzed):
+```{r}
+PERMANOVA_R2(TAX=taxa_corrected2, batchid=batchid, covariates=covar, key_index=4)
+```
+
+We see that in both Bray-Curtis dissimilarity on the taxonomic read count or Aitchison dissimilarity on the corresponding relative abundance, by standard PERMANOVA or with modification (euclidifies dissimilarities or add a constant to the non-diagonal dissimilarities such that all eigenvalues are non-negative in the underlying Principal Co-ordinates Analysis), batch variability is always reduced while the SBP variability is preserved. 
 
 
 ### Whether the corrected taxa read count table can better predict the key variable
 
-Based on the original taxa read count table:
+Whereas PERMANOVA R$^2$ reflects variability in the taxonomic read counts explained by batch and the key variable, the prediction accuracy reflects the proportion of the key variable explained by the taxonomic read counts. 
+
 ```{r}
 sbp = covar[, 'sbp']
-temp = RF_Pred_Regression(TAX=taxa, variable=sbp, main="RMSE of Predicting sbp by the Original")
-temp$rmse_across_fold
+taxa_result = list(taxa, taxa_corrected1, taxa_corrected2)
+
+pred_rmse = matrix(ncol=3, nrow=5)
+colnames(pred_rmse) = c("Original", "ConQuR (Default)", "ConQuR (Penalized)")
+
+for (ii in 1:3){
+  pred_rmse[, ii] = RF_Pred_Regression(TAX=taxa_result[[ii]], variable=sbp)$rmse_across_fold
+}
+
+par(mfrow=c(1,1))
+boxplot(pred_rmse, main="RMSE of Predicting SBP")
 ```
 
-Based on the corrected taxa read count table:
-```{r}
-temp = RF_Pred_Regression(TAX=taxa_corrected, variable=sbp, main="RMSE of Predicting sbp by the Corrected")
-temp$rmse_across_fold
-```
+We see that ConQuR can systematically improve the prediction accuracy of SBP from the taxonomic read counts. 
 
 
 ## Use of Tune_ConQuR 
 
-Tune among specified variations of ConQuR, and check the final variation selected in each cutoff:
+Overall, the fune-tuned result of ConQuR is recommended. We have the following options:
+
+1. batch_ref_pool: candidates of the reference batch, e.g., c("0", "1").
+2. logistic_lasso_pool: whether use logistic LASSO regression, e.g., c(T, F).
+3. quantile_type_pool: types of quantile regression, e.g., c("standard", "lasso", "composite").
+4. simple_match_pool: whether use the simple quantile-quantile matching, e.g., c(T, F).
+5. lambda_quantile_pool: candidates of the penalization parameter in quantile LASSO or composite quantile regression, e.g., c(NA, "2p/n", "2p/logn"). **Note**: always include NA is "standard" is included in *quantile_type_pool*. 
+6. interplt_pool: whether use interpolation in the piece-wise estimation, e.g., c(T, F).
+7. frequencyL: lower bound of taxon frequency that need fine-tuning, e.g., 0.
+8. frequencyU: upper bound of taxon frequency that need fine-tuning, e.g., 1.
+9. cutoff: cutoff of taxon frequency for fine-tuning, e.g., 0.1. 
+
+Below, we do not exhaust the options for a fast computation. We can check the selected fitting strategy for each cutoff:
 ```{r}
 result_tuned = Tune_ConQuR(tax_tab=taxa, batchid=batchid, covariates=covar,
                            batch_ref_pool=c("0", "1"),
@@ -142,12 +189,14 @@ Check the fine-tuned correcte taxa read count table:
 taxa_optimal = result_tuned$tax_final
 
 par(mfrow=c(1, 2))
-Plot_PCoA(TAX=taxa_optimal, factor=batchid, main="Optimal Correction, Bray-Curtis")
-Plot_PCoA(TAX=taxa_optimal, factor=batchid, dissimilarity="Aitch",  main="Optimal Correction, Aitchison")
+Plot_PCoA(TAX=taxa_optimal, factor=batchid, main="Fine-Tuned ConQuR, Bray-Curtis")
+Plot_PCoA(TAX=taxa_optimal, factor=batchid, dissimilarity="Aitch", main="Fine-Tuned ConQuR, Aitchison")
 
 ```
 
 
 
+## Use of ConQuR-libsize
 
+The use of ConQuR-libsize is very similar to that of ConQuR, thus is omitted. 
 

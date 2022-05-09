@@ -18,8 +18,8 @@ PERMANOVA_R2(TAX, batchid, covariates, key_index)
 \value{
 A list
 \itemize{
-  \item tab_count - A table summarizing PERMANOVA R2 computed on the original taxa read count table.
-  \item tab_rel - A table summarizing PERMANOVA R2 computed on the corresponding relative abundance table.
+  \item tab_count - A table summarizing PERMANOVA R2 computed on the original taxa read count table in Bray-Curtis dissimilarity.
+  \item tab_rel - A table summarizing PERMANOVA R2 computed on the corresponding relative abundance table in Euclidean dissimilarity (Aitchison dissimilarity).
 }
 }
 \description{

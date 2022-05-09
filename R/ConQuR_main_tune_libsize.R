@@ -1,24 +1,10 @@
 
-#' Remove batch effects from a taxa read count table
-#'
-#' @import quantreg
-#' @import cqrReg
-#' @import glmnet
-#' @import dplyr
-#' @import doParallel
-#' @import gplots
-#' @import vegan
-#' @import ade4
-#' @import compositions
-#' @import randomForest
-#' @import ROCR
-#' @import ape
-#' @import GUniFrac
-#' @import fastDummies
+#' Remove batch effects from a taxa read count table (library size is included in the model)
 #'
 #' @param tax_tab The taxa read count table, samples (row) by taxa (col).
 #' @param batchid The batch indicator, must be a factor.
 #' @param covariates The data.frame contains the key variable of interest and other covariates, e.g., data.frame(key, x1, x2).
+#' @param libsize_tune The samples' library sizes, which is designed to pass values from \code{Tune_ConQuR_libsize}; do not assign values, keep it as NULL.
 #' @param batch_ref A character, the name of the reference batch, e.g.,``2''.
 #' @param logistic_lasso A logical value, TRUE for L1-penalized logistic regression, FALSE for standard logistic regression; default is FALSE.
 #' @param quantile_type A character, ``standard'' for standard quantile regression, ``lasso'' for L1-penalized quantile regression, ``composite'' for composite quantile regression; default is ``standard''.
@@ -31,6 +17,7 @@
 #'
 #' @details
 #' \itemize{
+#'   \item Use this version when between-batch library size variability is not considered nuisance and maintained in the corrected taxa read count table.
 #'   \item Choose \code{batch_ref} based on prior knowledge, or try several options, there is no default.
 #'   \item The option ``composite'' of \code{quantile_type} is aggressive, use with caution.
 #'   \item If choose \code{simple_match}=TRUE, \code{logistic_lasso}, \code{quantile_type}, \code{lambda_quantile}, \code{interplt} and \code{delta} won't take effect.
@@ -51,14 +38,26 @@
 #'
 #' @export
 
-ConQuR <- function(tax_tab, batchid, covariates,
-                   batch_ref,
-                   logistic_lasso=F, quantile_type="standard", simple_match=F,
-                   lambda_quantile="2p/n", interplt=F,
-                   delta=0.4999, taus=seq(0.005, 0.995, by=0.005), num_core=2){
+ConQuR_libsize <- function(tax_tab, batchid, covariates,
+                           libsize_tune=NULL,
+                           batch_ref,
+                           logistic_lasso=F, quantile_type="standard", simple_match=F,
+                           lambda_quantile="2p/n", interplt=F,
+                           delta=0.4999, taus=seq(0.005, 0.995, by=0.005), num_core=2){
 
   # relevel batch id
   batchid = relevel(batchid, ref=batch_ref)
+
+  ###### libsize specific ######
+  libsize = libsize_tune
+  if (is.null(libsize)) libsize = apply(tax_tab, 1, sum)
+
+  tax_tab_temp = tax_tab
+  for (ii in 1:nrow(tax_tab)){
+    tax_tab_temp[ii, ] = tax_tab[ii, ] / libsize[ii]
+  }
+  tax_tab = tax_tab_temp # transform count into relative abundance
+
 
   registerDoParallel(num_core)
 
@@ -69,10 +68,10 @@ ConQuR <- function(tax_tab, batchid, covariates,
     ### correct each of the taxa ###
     tax_new = foreach (ll=1:ncol(tax_tab), .combine=cbind) %do%{
       y = as.numeric( tax_tab[, ll] )
-      simple_QQ(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
+      simple_QQ_libsize(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
     }
 
-  } else {
+  } else{
 
     #### otherwise, correct data via regression ####
 
@@ -90,25 +89,32 @@ ConQuR <- function(tax_tab, batchid, covariates,
     ### correct each of the taxa ###
     tax_new = foreach (ll=1:ncol(tax_tab), .combine=cbind) %do%{
       y = as.numeric( tax_tab[, ll] )
-      ConQuR_each(y=y, X=X, X_span=X_span, X_correct=X_correct, X_span_correct=X_span_correct, batch_ref=batch_ref,
-                  delta=delta, taus=taus, logistic_lasso=logistic_lasso, quantile_type=quantile_type, lambda_quantile=lambda_quantile, interplt=interplt)
+
+      ###### libsize specific ######
+      ConQuR_each_libsize(y=y, X=X, X_span=X_span, X_correct=X_correct, X_span_correct=X_span_correct, batch_ref=batch_ref,
+                          libsize = libsize,
+                          delta=delta, taus=taus, logistic_lasso=logistic_lasso, quantile_type=quantile_type, lambda_quantile=lambda_quantile, interplt=interplt)
     }
 
   }
 
-  if (ncol(tax_tab) == 1) tax_new = matrix(tax_new, nrow=nrow(tax_tab))
-  tax_new[tax_new < 0] = 0
 
-  rownames(tax_new) = rownames(tax_tab)
-  colnames(tax_new) = colnames(tax_tab)
-  return(tax_new)
+  ###### libsize specific ######
+  if (ncol(tax_tab) == 1) tax_new = matrix(tax_new, nrow=nrow(tax_tab))
+
+  tax_count_new = matrix(ncol=ncol(tax_new), nrow=nrow(tax_new))
+  for (ll in 1:nrow(tax_new)){
+    tax_count_new[ll, ] = round( tax_new[ll, ] * libsize[ll], digits=0 ) # transform back to count by multiplying relative abundance by library size
+  }
+
+  rownames(tax_count_new) = rownames(tax_tab)
+  colnames(tax_count_new) = colnames(tax_tab)
+  return(tax_count_new)
 
 }
 
 
-
-
-#' Tune over variations of ConQuR
+#' Tune over variations of ConQuR_libsize
 #'
 #' @param tax_tab The taxa read count table, samples (row) by taxa (col).
 #' @param batchid The batch indicator, must be a factor.
@@ -128,6 +134,7 @@ ConQuR <- function(tax_tab, batchid, covariates,
 #'
 #' @details
 #' \itemize{
+#'   \item Use this version when between-batch library size variability is not considered nuisance and maintained in the corrected taxa read count table.
 #'   \item ``original'', i.e., the original data without correction is always a default candidate.
 #'   \item If ``standard'' is one candidate for \code{quantile_type_pool}, always include NA as one candidate for \code{lambda_quantile_pool}.
 #'   \item Be cautious with candidate ``composite'' for \code{quantile_type_pool}, the underlying assumption is strong and the computation might be slow.
@@ -138,7 +145,7 @@ ConQuR <- function(tax_tab, batchid, covariates,
 #' @return A list
 #' \itemize{
 #'   \item tax_final - The optimal corrected taxa read count table, samples (row) by taxa (col).
-#'   \item method_final - A table summarizing variations of ConQuR chosen for each prevalence cutoff.
+#'   \item method_final - A table summarizing variations of ConQuR_libsize chosen for each prevalence cutoff.
 #'}
 #'
 #' @references
@@ -154,16 +161,19 @@ ConQuR <- function(tax_tab, batchid, covariates,
 #'
 #' @export
 
-Tune_ConQuR <- function(tax_tab, batchid, covariates,
-                        batch_ref_pool,
-                        logistic_lasso_pool,
-                        quantile_type_pool,
-                        simple_match_pool,
-                        lambda_quantile_pool,
-                        interplt_pool,
-                        frequencyL,
-                        frequencyU,
-                        cutoff=0.1, delta=0.4999, taus=seq(0.005, 0.995, by=0.005), num_core=2){
+Tune_ConQuR_libsize <- function(tax_tab, batchid, covariates,
+                                batch_ref_pool,
+                                logistic_lasso_pool,
+                                quantile_type_pool,
+                                simple_match_pool,
+                                lambda_quantile_pool,
+                                interplt_pool,
+                                frequencyL,
+                                frequencyU,
+                                cutoff=0.1, delta=0.4999, taus=seq(0.005, 0.995, by=0.005), num_core=2){
+
+  # compute library size
+  libsize_tune = apply(tax_tab, 1, sum)
 
   # prepare the method list, taxa pool corrresponding to the grid of frequency, and result table
   method1 = expand.grid(logistic=logistic_lasso_pool, quantile=quantile_type_pool, lambda=lambda_quantile_pool, interplt=interplt_pool)
@@ -213,30 +223,32 @@ Tune_ConQuR <- function(tax_tab, batchid, covariates,
 
       # do correction for all combination, record results and compute PERMANOVA R2
       for (current_method in 1:nrow(method1)){
-        tab_list[[1+current_method]] = ConQuR(tax_tab=tab, batchid=batchid, covariates=covariates,
-                                              batch_ref=as.character(batch_ref_pool[current_ref]),
-                                              logistic_lasso=method1[current_method, 'logistic'],
-                                              quantile_type=as.character(method1[current_method, 'quantile']),
-                                              simple_match=F,
-                                              lambda_quantile=as.character(method1[current_method, 'lambda']),
-                                              interplt=method1[current_method, 'interplt'],
-                                              delta=delta, taus=taus, num_core=num_core)
+        tab_list[[1+current_method]] = ConQuR_libsize(tax_tab=tab, batchid=batchid, covariates=covariates,
+                                                      libsize_tune=libsize_tune,
+                                                      batch_ref=as.character(batch_ref_pool[current_ref]),
+                                                      logistic_lasso=method1[current_method, 'logistic'],
+                                                      quantile_type=as.character(method1[current_method, 'quantile']),
+                                                      simple_match=F,
+                                                      lambda_quantile=as.character(method1[current_method, 'lambda']),
+                                                      interplt=method1[current_method, 'interplt'],
+                                                      delta=delta, taus=taus, num_core=num_core)
 
         index = which( apply(tab_list[[1+current_method]], 1, sum) > 0 )
-        if (length(index) != 0 & length( unique(batchid[index]) ) != 1){
+        if (length(index) != 0  & length( unique(batchid[index]) ) != 1){
           R2[1+current_method, 2] = adonis(formula = tab_list[[1+current_method]][index, ] ~ batchid[index])$aov.tab[1, 5]
         }
       }
 
       if (method2 == T){
-        tab_list[[1+nrow(method1)+1]] = ConQuR(tax_tab=tab, batchid=batchid, covariates=covariates,
-                                               batch_ref=as.character(batch_ref_pool[current_ref]),
-                                               logistic_lasso=F,
-                                               quantile_type="standard",
-                                               simple_match=T,
-                                               lambda_quantile="2p/n",
-                                               interplt=F,
-                                               delta=delta, taus=taus, num_core=num_core)
+        tab_list[[1+nrow(method1)+1]] = ConQuR_libsize(tax_tab=tab, batchid=batchid, covariates=covariates,
+                                                       libsize_tune=libsize_tune,
+                                                       batch_ref=as.character(batch_ref_pool[current_ref]),
+                                                       logistic_lasso=F,
+                                                       quantile_type="standard",
+                                                       simple_match=T,
+                                                       lambda_quantile="2p/n",
+                                                       interplt=F,
+                                                       delta=delta, taus=taus, num_core=num_core)
 
         index = which( apply(tab_list[[1+nrow(method1)+1]], 1, sum) > 0 )
         if (length(index) != 0 & length( unique(batchid[index]) ) != 1){
@@ -262,14 +274,15 @@ Tune_ConQuR <- function(tax_tab, batchid, covariates,
 
       tab = tax_tab[, cut_list_remaining, drop=F]
 
-      tax_new_remaining = ConQuR(tax_tab=tab, batchid=batchid, covariates=covariates,
-                                 batch_ref=as.character(batch_ref_pool[current_ref]),
-                                 logistic_lasso=F,
-                                 quantile_type="standard",
-                                 simple_match=F,
-                                 lambda_quantile="2p/n",
-                                 interplt=F,
-                                 delta=delta, taus=taus, num_core=num_core)
+      tax_new_remaining = ConQuR_libsize(tax_tab=tab, batchid=batchid, covariates=covariates,
+                                         libsize_tune=libsize_tune,
+                                         batch_ref=as.character(batch_ref_pool[current_ref]),
+                                         logistic_lasso=F,
+                                         quantile_type="standard",
+                                         simple_match=F,
+                                         lambda_quantile="2p/n",
+                                         interplt=F,
+                                         delta=delta, taus=taus, num_core=num_core)
 
       for (col in 1:length( cut_list_remaining )){
         tax_new[, cut_list_remaining[col]] = tax_new_remaining[, col]
@@ -315,7 +328,4 @@ Tune_ConQuR <- function(tax_tab, batchid, covariates,
   return(list(tax_final=tax_final, method_final=method_final))
 
 }
-
-
-
 

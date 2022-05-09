@@ -4,7 +4,7 @@
 \alias{RF_Pred_Regression}
 \title{Predict continuous variables based on a taxa read count table by random forest}
 \usage{
-RF_Pred_Regression(TAX, variable, fold = 5, main = NULL, seed = 2020)
+RF_Pred_Regression(TAX, variable, fold = 5, seed = 2020)
 }
 \arguments{
 \item{TAX}{The taxa read count table, samples (row) by taxa (col).}
@@ -13,14 +13,11 @@ RF_Pred_Regression(TAX, variable, fold = 5, main = NULL, seed = 2020)
 
 \item{fold}{The number of folds; default is 5.}
 
-\item{main}{The title of plot; default is NULL.}
-
 \item{seed}{The seed to generate fold indices for samples; default is 2020.}
 }
 \value{
 A list
 \itemize{
-  \item Print a boxplot of RMSEs across folds.
   \item pred - A table summarizing the predicted and true values for all samples.
   \item rmse_across_fold - RMSEs across folds.
 }

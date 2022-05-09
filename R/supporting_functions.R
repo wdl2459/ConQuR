@@ -13,8 +13,8 @@
 #'
 #' @return A list
 #' \itemize{
-#'   \item tab_count - A table summarizing PERMANOVA R2 computed on the original taxa read count table.
-#'   \item tab_rel - A table summarizing PERMANOVA R2 computed on the corresponding relative abundance table.
+#'   \item tab_count - A table summarizing PERMANOVA R2 computed on the original taxa read count table in Bray-Curtis dissimilarity.
+#'   \item tab_rel - A table summarizing PERMANOVA R2 computed on the corresponding relative abundance table in Euclidean dissimilarity (Aitchison dissimilarity).
 #'}
 #'
 #' @references
@@ -30,7 +30,7 @@ PERMANOVA_R2 <- function(TAX, batchid, covariates, key_index){
   colnames(tab_count) = colnames(tab_rel) = c("standard", "sqrt.dist=T", "add=T")
   rownames(tab_count) = rownames(tab_rel) = c("batch", "key")
 
-  # count
+  # bray-curtis
   tab_count[1,1] = adonis(formula = TAX ~ batchid)$aov.tab[1, 5]
   tab_count[1,2] = adonis2(formula = TAX ~ batchid, sqrt.dist=TRUE)$R2[1]
   tab_count[1,3] = adonis2(formula = TAX ~ batchid, add=TRUE)$R2[1]
@@ -39,22 +39,21 @@ PERMANOVA_R2 <- function(TAX, batchid, covariates, key_index){
   tab_count[2,2] = adonis2(formula = TAX ~ ., data=data.frame(covariates[, key_index]), sqrt.dist=TRUE)$R2[1]
   tab_count[2,3] = adonis2(formula = TAX ~ ., data=data.frame(covariates[, key_index]), add=TRUE)$R2[1]
 
-  # rel
-  TAX_temp = t( apply(TAX, 1, function(z){
-    z / sum(z)
-  }) )
+  # aitchison
+  Z = coda.base::dist(TAX+0.5, method="aitchison")
 
-  tab_rel[1,1] = adonis(formula = TAX_temp ~ batchid)$aov.tab[1, 5]
-  tab_rel[1,2] = adonis2(formula = TAX_temp ~ batchid, sqrt.dist=TRUE)$R2[1]
-  tab_rel[1,3] = adonis2(formula = TAX_temp ~ batchid, add=TRUE)$R2[1]
+  tab_rel[1,1] = adonis(formula = Z  ~ batchid, method="euclidean")$aov.tab[1, 5]
+  tab_rel[1,2] = adonis2(formula = Z  ~ batchid, method="euclidean", sqrt.dist=TRUE)$R2[1]
+  tab_rel[1,3] = adonis2(formula = Z  ~ batchid, method="euclidean", add=TRUE)$R2[1]
 
-  tab_rel[2,1] = adonis(formula = TAX_temp ~ ., data=data.frame(covariates[, key_index]))$aov.tab[1, 5]
-  tab_rel[2,2] = adonis2(formula = TAX_temp ~ ., data=data.frame(covariates[, key_index]), sqrt.dist=TRUE)$R2[1]
-  tab_rel[2,3] = adonis2(formula = TAX_temp ~ ., data=data.frame(covariates[, key_index]), add=TRUE)$R2[1]
+  tab_rel[2,1] = adonis(formula = Z  ~ ., data=data.frame(covariates[, key_index]), method="euclidean")$aov.tab[1, 5]
+  tab_rel[2,2] = adonis2(formula = Z  ~ ., data=data.frame(covariates[, key_index]), method="euclidean", sqrt.dist=TRUE)$R2[1]
+  tab_rel[2,3] = adonis2(formula = Z  ~ ., data=data.frame(covariates[, key_index]), method="euclidean", add=TRUE)$R2[1]
 
   return(list(tab_count=tab_count, tab_rel=tab_rel))
 
 }
+
 
 
 ### PCoA plots: Bray-Curtis, GUniFrac (unweighted, weighted, generalized), Aitchinson
@@ -124,22 +123,20 @@ Plot_PCoA <- function(TAX, factor, sub_index=NULL, dissimilarity="Bray", GUniFra
 #' Predict binary variables based on a taxa read count table by random forest
 #'
 #' @param TAX The taxa read count table, samples (row) by taxa (col).
-#' @param factor The binary variable to predict, e.g., the key variable, case/control.
+#' @param factor The binary variable to predict, e.g., the key variable, case/control, must be a factor.
 #' @param fold The number of folds; default is 5.
-#' @param main The title of plot; default is NULL.
 #' @param seed The seed to generate fold indices for samples; default is 2020.
 #'
 #' @return A list
 #' \itemize{
-#'   \item Print a ROC curve of predictions accumulated from the folds, e.g., on all samples.
 #'   \item pred - A table summarizing the predicted probabilities and true labels for all samples.
 #'   \item auc_across_fold - AUC of the ROC curves across folds.
-#'   \item auc_on_all - AUC of the ROC curve on all samples (the printed).
+#'   \item auc_on_all - AUC of the ROC curve on all samples.
 #'}
 #'
 #' @export
 
-RF_Pred <- function(TAX, factor, fold=5, main=NULL, seed=2020){
+RF_Pred <- function(TAX, factor, fold=5, seed=2020){
 
   set.seed(seed)
   ss = sample(1:fold,size=nrow(TAX),replace=T,prob=rep(1/fold, fold)) # assign fold for samples
@@ -175,10 +172,6 @@ RF_Pred <- function(TAX, factor, fold=5, main=NULL, seed=2020){
   auc.perf = performance(pred, measure = "auc")
   auc_value = auc.perf@y.values[[1]]
 
-  plot(perf, main=main, col=2)
-  abline(coef = c(0,1))
-  text(0.85, 0.1, paste0("AUC=", round(auc_value, digits=2)))
-
   return(list(pred=record_tab, auc_across_fold=record_auc, auc_on_all=auc_value))
 
 }
@@ -191,19 +184,17 @@ RF_Pred <- function(TAX, factor, fold=5, main=NULL, seed=2020){
 #' @param TAX The taxa read count table, samples (row) by taxa (col).
 #' @param variable The continuous variable to predict.
 #' @param fold The number of folds; default is 5.
-#' @param main The title of plot; default is NULL.
 #' @param seed The seed to generate fold indices for samples; default is 2020.
 #'
 #' @return A list
 #' \itemize{
-#'   \item Print a boxplot of RMSEs across folds.
 #'   \item pred - A table summarizing the predicted and true values for all samples.
 #'   \item rmse_across_fold - RMSEs across folds.
 #'}
 #'
 #' @export
 
-RF_Pred_Regression <- function(TAX, variable, fold=5, main=NULL, seed=2020){
+RF_Pred_Regression <- function(TAX, variable, fold=5, seed=2020){
 
   set.seed(seed)
   ss = sample(1:fold,size=nrow(TAX),replace=T,prob=rep(1/fold, fold)) # assign fold for samples
@@ -230,9 +221,62 @@ RF_Pred_Regression <- function(TAX, variable, fold=5, main=NULL, seed=2020){
     record_rmse[ii] = sqrt(mean( (prediction_for_rmse - testy)^2 ))
   }
 
-  boxplot(record_rmse, main=main)
-
   return(list(pred=record_tab, rmse_across_fold=record_rmse))
+
+}
+
+
+# Predict multiclass key variable using random forest, k-fold cross-validation (out-of-bag is not stable), cross entropy from k fold
+
+#' Predict multiclass variables based on a taxa read count table by random forest
+#'
+#' @param TAX The taxa read count table, samples (row) by taxa (col).
+#' @param factor The multiclass variable to predict, e.g., the key variable, never smoker/former smoker/current smoker, must be a factor.
+#' @param fold The number of folds; default is 5.
+#' @param seed The seed to generate fold indices for samples; default is 2020.
+#'
+#' @return A list
+#' \itemize{
+#'   \item pred - A table summarizing the predicted probabilities and true labels for all samples.
+#'   \item cross_entropy_across_fold - mean cross-entropy across folds.
+#'}
+#'
+#' @export
+
+RF_Pred_Multiclass <- function(TAX, factor, fold=5, seed=2020){
+
+  set.seed(seed)
+  ss = sample(1:fold,size=nrow(TAX),replace=T,prob=rep(1/fold, fold)) # assign fold for samples
+
+  temp = as.matrix(TAX)
+  rownames(temp) = NULL
+  colnames(temp) = NULL
+
+  # do prediction across folds
+  record_tab = NULL
+  record_entropy = NULL
+  for (ii in 1:fold){
+    trainy = factor[ss!=ii]
+    testy = factor[ss==ii]
+
+    trainx = temp[ss!=ii, ]
+    testx = temp[ss==ii, ]
+
+    rf_classifier = randomForest(trainy ~ ., data=trainx, importance=TRUE)
+
+    prediction_for_roc_curve = predict(rf_classifier,testx,type="prob")
+    testy = dummy_cols(testy)[, -1]
+
+    cross_entropy = NULL
+    for (jj in 1:nrow(testy)){
+      cross_entropy[jj] = - sum( testy[jj, ] * log(prediction_for_roc_curve[jj, ])    )
+    }
+
+    record_tab = rbind(record_tab, data.frame(prediction_for_roc_curve, testy))
+    record_entropy[[ii]] = mean( cross_entropy )
+  }
+
+  return(list(pred=record_tab, cross_entropy_across_fold=record_entropy))
 
 }
 

@@ -4,26 +4,23 @@
 \alias{RF_Pred}
 \title{Predict binary variables based on a taxa read count table by random forest}
 \usage{
-RF_Pred(TAX, factor, fold = 5, main = NULL, seed = 2020)
+RF_Pred(TAX, factor, fold = 5, seed = 2020)
 }
 \arguments{
 \item{TAX}{The taxa read count table, samples (row) by taxa (col).}
 
-\item{factor}{The binary variable to predict, e.g., the key variable, case/control.}
+\item{factor}{The binary variable to predict, e.g., the key variable, case/control, must be a factor.}
 
 \item{fold}{The number of folds; default is 5.}
-
-\item{main}{The title of plot; default is NULL.}
 
 \item{seed}{The seed to generate fold indices for samples; default is 2020.}
 }
 \value{
 A list
 \itemize{
-  \item Print a ROC curve of predictions accumulated from the folds, e.g., on all samples.
   \item pred - A table summarizing the predicted probabilities and true labels for all samples.
   \item auc_across_fold - AUC of the ROC curves across folds.
-  \item auc_on_all - AUC of the ROC curve on all samples (the printed).
+  \item auc_on_all - AUC of the ROC curve on all samples.
 }
 }
 \description{

@@ -1,21 +1,11 @@
 
-########## ConQuR: help functions ##########
+########## ConQuR-libsize: help functions ##########
 
 
 ### fast computation of zero-inflated conditional quantile function
 
-# Locate taustar to nearest tau
-locate.tau = function(tau.target, taus){
-  loc = 0
-
-  if (tau.target>0)
-    loc = which(abs(taus - tau.target) == min(abs(taus-tau.target)))
-
-  return(loc[1])
-}
-
 # fast computation (not by exact tau)
-proposed.method.fast <- function(logistic, xl, quantile, qmat, n, delta, taus, logistic_lasso, interplt){
+proposed.method.fast.libsize <- function(logistic, xl, quantile, qmat, n, libsize, delta, taus, logistic_lasso, interplt){
 
   # estimate the probability of being positive
   if (logistic_lasso == T){
@@ -42,6 +32,9 @@ proposed.method.fast <- function(logistic, xl, quantile, qmat, n, delta, taus, l
   for (ii in 1:nrow(xl)){
     fittedy = as.numeric(c(1, qmat[ii, ])) %*% as.matrix(quantile)
 
+    ###### libsize specific ######
+    fittedy = exp(fittedy) # transform back to relative abundance
+
     if (length(Taus.s[[ii]]) > 0 & Taus.s[[ii]][1] < 1){
       location = unlist(lapply(Taus.s[[ii]], locate.tau, taus))
       fit = fittedy[location]
@@ -49,11 +42,14 @@ proposed.method.fast <- function(logistic, xl, quantile, qmat, n, delta, taus, l
         fit = c(rep(0, length(which(location == 0))), fit)
       }
 
+      ###### libsize specific ######
       if (interplt == T){
-        temp_qf = c( rep(0, P1[[ii]]), ceiling( fit[1]*P2[[ii]]-1 ), ceiling( fit[-1]-1 ) )
+        temp_qf = c( rep(0, P1[[ii]]), fit[1]*P2[[ii]], fit[-1] )
       } else{
-        temp_qf = c( rep(0, P1[[ii]]), ceiling( fit-1 ) )
+        temp_qf = c( rep(0, P1[[ii]]), fit )
       }
+      # temp_qf_sf = stepfun(taus, c(0, temp_qf))
+      # quant[ii, ] = rearrange(temp_qf_sf)(taus)
       quant[ii, ] = temp_qf
     } else quant[ii, ] = rep(0, length(taus))
   }
@@ -64,7 +60,7 @@ proposed.method.fast <- function(logistic, xl, quantile, qmat, n, delta, taus, l
 
 ### simple quantile-quantile matching
 
-simple_QQ <- function(y, batchid, batch_ref, taus){
+simple_QQ_libsize <- function(y, batchid, batch_ref, taus){
 
   # info about batchid
   tab_batch = table(batchid)
@@ -86,7 +82,7 @@ simple_QQ <- function(y, batchid, batch_ref, taus){
       ref = ziqr.fast[[which( name_batch == batchid[kk] )]]
 
       loc = which(ref == y[kk])
-      value = round( mean( ziqr.fast.correct[loc] ), digit=0) # if multiple quantiles equal to obs, take the mean of corrected
+      value = mean( ziqr.fast.correct[loc] ) # if multiple quantiles equal to obs, take the mean of corrected
 
       if (length(loc) == 0){
         loc_temp = which(ref < y[kk])
@@ -105,8 +101,9 @@ simple_QQ <- function(y, batchid, batch_ref, taus){
 
 ### ConQuR for each taxon
 
-ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch_ref,
-                        delta, taus, logistic_lasso, quantile_type, lambda_quantile, interplt, logistic_thres=8){
+ConQuR_each_libsize <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch_ref,
+                                libsize,
+                                delta, taus, logistic_lasso, quantile_type, lambda_quantile, interplt, logistic_thres=8){
 
   to_skip <<- F
 
@@ -120,16 +117,18 @@ ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch
 
     # choose or force (not balanced or too few in either categories) to run standard logistic
     logistic_lasso = F
-    logistic_fit = glm(sy ~ ., family = "binomial", data = X)
 
     # original design matrix + corrected design matrix with non-ref levels of batch == 0
-    X_logistic = X
-    X_logistic_correct = X_correct
+    X_logistic = cbind(X, libsize)
+    X_logistic_correct = cbind(X_correct, libsize)
+
+    logistic_fit = glm(sy ~ ., family = "binomial", data = X_logistic)
 
   } else{
 
     # standardize original design matrix for lasso logistic
-    x_logistic = scale(X_span, center=T, scale=T)
+    X_logisic_span = cbind(X_span, libsize)
+    x_logistic = scale(X_logisic_span, center=T, scale=T)
 
     # lasso logistic
     logistic_cv = cv.glmnet(x_logistic, sy, family = "binomial", alpha = 1, lambda = NULL)
@@ -163,7 +162,7 @@ ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch
 
     # check whether data_sub becomes empty
     if (ncol(data_sub) == 0){
-      y_new = simple_QQ(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
+      y_new = simple_QQ_libsize(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
       return(y_new)
     } # use simple match when data_sub becomes empty
 
@@ -204,7 +203,7 @@ ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch
 
     # check whether x_quantile becomes empty
     if (ncol(x_quantile) == 0){
-      y_new = simple_QQ(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
+      y_new = simple_QQ_libsize(y=y, batchid=batchid, batch_ref=batch_ref, taus=taus)
       return(y_new)
     } # use simple match when x_quantile becomes empty
 
@@ -237,8 +236,8 @@ ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch
   # fit quantile model
   tryCatch({
 
-    # jitter read count
-    y_sub = dither(y_sub, type = "right", value = 1)
+    ###### libsize specific ######
+    y_sub = log(y_sub) # model log relative abundance <=> model log count with library size as an offset
 
     # quantile regression
     if (quantile_type == "standard"){
@@ -273,22 +272,22 @@ ConQuR_each <- function(y, X, X_span, X_correct, X_span_correct, batch_ref=batch
   quant_coef[is.na(quant_coef)] = 0
 
   # piecewise estimation of conditional quantile functions
-  ziqr.fast = proposed.method.fast(logistic=logistic_fit, xl=X_logistic,
-                                   quantile=quant_coef, qmat=X_quantile,
-                                   n=length(y),
-                                   delta=delta, taus=taus, logistic_lasso=logistic_lasso, interplt=interplt)
-
-  ziqr.fast.correct = proposed.method.fast(logistic=logistic_fit, xl=X_logistic_correct,
-                                           quantile=quant_coef, qmat=X_quantile_correct,
-                                           n=length(y),
+  ziqr.fast = proposed.method.fast.libsize(logistic=logistic_fit, xl=X_logistic,
+                                           quantile=quant_coef, qmat=X_quantile,
+                                           n=length(y), libsize=libsize,
                                            delta=delta, taus=taus, logistic_lasso=logistic_lasso, interplt=interplt)
+
+  ziqr.fast.correct = proposed.method.fast.libsize(logistic=logistic_fit, xl=X_logistic_correct,
+                                                   quantile=quant_coef, qmat=X_quantile_correct,
+                                                   n=length(y), libsize=libsize,
+                                                   delta=delta, taus=taus, logistic_lasso=logistic_lasso, interplt=interplt)
 
 
   ### quantile-quantile matching
 
   y_new = unlist( lapply(1:length(y), function(kk){
     loc = which(ziqr.fast[kk, ] == y[kk])
-    value = round( mean( ziqr.fast.correct[kk, loc] ), digit=0) # if multiple quantiles equal to obs, take the mean of corrected
+    value = mean( ziqr.fast.correct[kk, loc] ) # if multiple quantiles equal to obs, take the mean of corrected
 
     if (length(loc) == 0){
       loc_temp = which(ziqr.fast[kk, ] < y[kk])
