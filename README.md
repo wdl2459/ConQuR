@@ -40,7 +40,7 @@ The process should take approximately 6 minutes.
 
 ## Demo 
 
-All functions in `ConQuR` are described in the manual: https://github.com/wdl2459/ConQuR/blob/main/ConQuR_1.0.pdf
+All functions in `ConQuR` are described in the manual: https://github.com/wdl2459/ConQuR/blob/main/ConQuR_2.0.pdf
 
 A full analysis based on a sample microbiome data (a random sub-sample of CARDIA data set) is shown in the vignettes, including the standard fitting strategy, the fine-tuned version, and investigations on the original and batch-removed taxa read count table. The entire analysis should take approximately 6 minutes. Users can find the vignettes at: https://wdl2459.github.io/ConQuR/ConQuR.Vignette.html.
 If users include the vignettes during installation, from an `R` session, type:
