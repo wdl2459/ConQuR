@@ -8,11 +8,11 @@ This package conducts batch effects removal from a taxa read count table by a co
 
 ## System requirements
 
-The `ConQuR` package (version 1.0) should be compatible with Windows, Mac, and Linux operating systems.
+The `ConQuR` package (version 2.0) should be compatible with Windows, Mac, and Linux operating systems.
 
 Before setting up the package, users should have `R` version 3.5.0 or higher. 
 
-The package depends on the following R packages: quantreg, cqrReg, glmnet, dplyr, doParallel, gplots, vegan, ade4, compositions, randomForest, ROCR, ape, GUniFrac, knitr, rmarkdown.  
+The package depends on the following R packages: quantreg, cqrReg, glmnet, dplyr, doParallel, gplots, vegan, ade4, compositions, randomForest, ROCR, ape, GUniFrac, knitr, rmarkdown, fastDummies.  
 
 
 ## Installation guide
