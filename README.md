@@ -58,3 +58,8 @@ library(doParallel)
 ```
 
 For detailed use, refer to the materials in Demo. 
+
+
+## DOI
+
+https://zenodo.org/badge/latestdoi/368676861.
